@@ -10,10 +10,19 @@ import numpy as np
 import json
 import tyro
 
-def main(input_path: str):
+device = torch.device("cuda:0")
 
-    input_file = open(input_path, "r")
-    metadata = json.load(input_file)
+def _detach_tensors_from_dict(d, inplace=True):
+    if not inplace:
+        d = d.copy()
+    for key in d:
+        if isinstance(d[key], torch.Tensor):
+            d[key] = d[key].detach()
+    return d
+
+def load_gaussian_splats_from_input_file(input_path: str):
+    with open(input_path, "r") as f:
+        metadata = json.load(f)
     checkpoint_path = metadata["checkpoint"]
     model_params, _ = torch.load(checkpoint_path)
 
@@ -26,6 +35,13 @@ def main(input_path: str):
         "rotation": model_params[5], 
         "opacity": model_params[6].squeeze(1),
     }
+
+    _detach_tensors_from_dict(splats)
+
+    return splats, metadata
+
+def main(input_path: str):
+    splats, metadata = load_gaussian_splats_from_input_file(input_path)
 
 
     viewmat = torch.tensor([[-0.9961, -0.0325,  0.0822, -0.0713],
@@ -40,19 +56,29 @@ def main(input_path: str):
         ]
     )
 
-    # K = torch.tensor([[1.0548e+03, 0.0000e+00, 6.3350e+02],
-    #         [0.0000e+00, 1.0514e+03, 4.1575e+02],
-    #         [0.0000e+00, 0.0000e+00, 1.0000e+00]], device='cuda:0')
-
-    device = torch.device("cuda:0")
     viewmat[3,3] = 10
     viewmat = viewmat.to(device)
     K = K.to(device)
 
+    if "intrinsics" in metadata:
+        intrinsics = metadata["intrinsics"]
+        K = torch.tensor(
+            [[intrinsics["fx"], 0, intrinsics["cx"]],
+            [0, intrinsics["fy"], intrinsics["cy"]],
+            [0, 0, 1.0]]
+        ).float().to(device)
+
+    # metadata["height"] = 83
+
+    if "width" not in metadata:
+        metadata["width"] = 1267
+        # width = metadata["width"]
+    if "height" not in metadata:
+        metadata["height"] = 832
+
 
     means = splats["xyz"].float()
     opacities = splats["opacity"]
-    # colors = splats["sh0"]
     quats = splats["rotation"]
     scales = splats["scaling"].float()
 
@@ -60,7 +86,7 @@ def main(input_path: str):
     scales = torch.exp(scales)
     colors = torch.cat([splats["features_dc"], splats["features_rest"]], 1)
 
-    output, _, meta = rasterization(means, quats, scales, opacities, colors, viewmat[None], K[None], width=1267, height=832, sh_degree=3)
+    output, _, meta = rasterization(means, quats, scales, opacities, colors, viewmat[None], K[None], width=1267, height=83, sh_degree=3)
 
     output = output[0].cpu().numpy()
     output = (np.clip(output, 0, 1) * 255).astype(np.uint8)
@@ -84,18 +110,18 @@ def main(input_path: str):
     scroll_area.setWidget(label)
     scroll_area.setWidgetResizable(True)
 
-    scrollbar_roll = QSlider()
-    scrollbar_pitch = QScrollBar()
-    scrollbar_yaw = QScrollBar()
+    slider_roll = QSlider()
+    slider_pitch = QSlider()
+    slider_yaw = QSlider()
     x_slider = QSlider()
     y_slider = QSlider()
     z_slider = QSlider()
-    for scrollbar in [scrollbar_roll, scrollbar_pitch, scrollbar_yaw]:
-        scrollbar.setMinimum(-180)
-        scrollbar.setMaximum(180)
-        scrollbar.setValue(0)
-        scrollbar.setOrientation(1)
-        layout.addWidget(scrollbar)
+    for slider in [slider_roll, slider_pitch, slider_yaw]:
+        slider.setMinimum(-180)
+        slider.setMaximum(180)
+        slider.setValue(0)
+        slider.setOrientation(1)
+        layout.addWidget(slider)
 
     for slider in [x_slider, y_slider, z_slider]:
         slider.setMinimum(-1000)
@@ -103,6 +129,20 @@ def main(input_path: str):
         slider.setValue(0)
         slider.setOrientation(1)
         layout.addWidget(slider)
+
+    scaling_slider = QSlider()
+    scaling_slider.setMinimum(0)
+    scaling_slider.setMaximum(100)
+    scaling_slider.setValue(100)
+    scaling_slider.setOrientation(1)
+    layout.addWidget(scaling_slider)
+
+    explosion_slider = QSlider()
+    explosion_slider.setMinimum(0)
+    explosion_slider.setMaximum(200)
+    explosion_slider.setValue(100)
+    explosion_slider.setOrientation(1)
+    layout.addWidget(explosion_slider)
 
 
     pixmap = QPixmap(output.shape[1], output.shape[0])
@@ -120,10 +160,9 @@ def main(input_path: str):
     timer.start(10)
 
     def loop():
-        # global viewmat, K
-        roll = scrollbar_roll.value()
-        pitch = scrollbar_pitch.value()
-        yaw = scrollbar_yaw.value()
+        roll = slider_roll.value()
+        pitch = slider_pitch.value()
+        yaw = slider_yaw.value()
         roll_rad = np.deg2rad(roll)
         pitch_rad = np.deg2rad(pitch)
         yaw_rad = np.deg2rad(yaw)
@@ -153,7 +192,9 @@ def main(input_path: str):
         viewmat[1,3] = y_slider.value() /100.0
         viewmat[2,3] = z_slider.value() /100.0
         nonlocal K, means, quats, scales, opacities, colors
-        output, _, meta = rasterization(means, quats, scales, opacities, colors, viewmat[None], K[None], width=1267, height=832, sh_degree=3)
+        scaling_modifier = scaling_slider.value() / 100.0
+        explosion = explosion_slider.value() / 100.0
+        output, _, meta = rasterization(means  * explosion, quats, scales * scaling_modifier, opacities, colors, viewmat[None], K[None], width=metadata["width"], height=metadata["height"], sh_degree=3)
         output = output[0].cpu().numpy()
         output = (np.clip(output, 0, 1) * 255).astype(np.uint8)
         image = QImage(output.data, output.shape[1], output.shape[0], output.shape[1] * 3, QImage.Format_RGB888)
