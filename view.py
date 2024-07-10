@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QScrollBar,
     QSlider,
 )
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QColorConstants
 from PyQt5.QtCore import QTimer
 
 import numpy as np
@@ -218,6 +218,42 @@ def main(input_path: str):
             )
             image = self._torch_to_qimage(output[0])
             pixmap.convertFromImage(image)
+
+            painter = QPainter(pixmap)
+            def _draw_gizmos(painter):
+                nonlocal viewmat, K
+                viewmat_np = viewmat.detach().cpu().numpy()
+                K_np = K.detach().cpu().numpy()
+                painter.setPen(QColorConstants.Blue)
+
+                points_3d = np.array(
+                    [
+                        [0, 0, 0, 1],
+                        [1, 0, 0, 1],
+                        [0, 1, 0, 1],
+                        [0, 0, 1, 1],
+                    ]
+                ).astype(np.float32)
+
+                points_3d_wrt_camera = viewmat_np @ points_3d.T
+                points_2d = K_np @ points_3d_wrt_camera[:3, :]
+                points_2d /= points_2d[2, :]
+                points_2d = points_2d[:2, :].T
+                points_2d = points_2d.astype(np.int32)
+                
+                # Draw x-axis
+                painter.setPen(QColorConstants.Red)
+                painter.drawLine(points_2d[0, 0], points_2d[0, 1], points_2d[1, 0], points_2d[1, 1])
+                # Draw y-axis
+                painter.setPen(QColorConstants.Green)
+                painter.drawLine(points_2d[0, 0], points_2d[0, 1], points_2d[2, 0], points_2d[2, 1])
+                # Draw z-axis
+                painter.setPen(QColorConstants.Blue)
+                painter.drawLine(points_2d[0, 0], points_2d[0, 1], points_2d[3, 0], points_2d[3, 1])
+
+                painter.end()
+
+            _draw_gizmos(painter)
             self.viewport.setPixmap(pixmap)
 
     app = GaussianSplatViewer([])
