@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QTextEdit,
     QLineEdit,
-    QHBoxLayout
+    QHBoxLayout,
 )
 from PyQt5.QtGui import (
     QPixmap,
@@ -107,10 +107,11 @@ def main(input_path: str):
             self._create_viewport()
             self._create_sliders()
             self._create_intrinsic_panel()
+            self._create_extends_panel()
 
         def _create_window(self):
             window = QMainWindow()
-            window.setWindowTitle("GSplat Viewer")
+            window.setWindowTitle("GSplat Explorer")
             window.setGeometry(100, 100, 640, 480)
             window.setCentralWidget(QWidget())
             self.window = window
@@ -123,7 +124,7 @@ def main(input_path: str):
             self.sidebar = QVBoxLayout()
             viewport_and_sidebar = QHBoxLayout()
             self.layout.addLayout(viewport_and_sidebar)
-            viewport_and_sidebar.addWidget(scroll_area, 2)
+            viewport_and_sidebar.addWidget(scroll_area)
             scroll_area.setWidget(self.viewport)
             scroll_area.setWidgetResizable(True)
             scroll_area_2 = QScrollArea()
@@ -175,6 +176,41 @@ def main(input_path: str):
             self.intrinsics_layout.addWidget(self.cy_input, 3, 1)
             self.intrinsics_layout.addWidget(self.width_input, 4, 1)
             self.intrinsics_layout.addWidget(self.height_input, 5, 1)
+
+        def _create_extends_panel(self):
+            self.extends_frame = QFrame()
+            self.sidebar.addWidget(self.extends_frame)
+            self.extends_layout = QGridLayout(self.extends_frame)
+            self.extends_frame.setLayout(self.extends_layout)
+            self.extends_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+            x_minus_label = QLabel("X-")
+            x_plus_label = QLabel("X+")
+            y_minus_label = QLabel("Y-")
+            y_plus_label = QLabel("Y+")
+            z_minus_label = QLabel("Z-")
+            z_plus_label = QLabel("Z+")
+            
+            self.x_minus_slider = QSlider()
+            self.x_plus_slider = QSlider()
+            self.y_minus_slider = QSlider()
+            self.y_plus_slider = QSlider()
+            self.z_minus_slider = QSlider()
+            self.z_plus_slider = QSlider()
+
+            row = 0
+            for slider, label, type_ in zip([self.x_minus_slider, self.x_plus_slider, self.y_minus_slider, self.y_plus_slider, self.z_minus_slider, self.z_plus_slider], [x_minus_label, x_plus_label, y_minus_label, y_plus_label, z_minus_label, z_plus_label], ["x-", "x+", "y-", "y+", "z-", "z+"]):
+                slider.setMinimum(-2000)
+                slider.setMaximum(2000)
+                if type_[-1] == "+":
+                    slider.setValue(2000)
+                else:
+                    slider.setValue(-2000)
+                slider.setOrientation(1)
+                label.setText(f"{type_}: {slider.value()/100}")
+                self.extends_layout.addWidget(label, row, 0)
+                self.extends_layout.addWidget(slider, row, 1)
+                slider.valueChanged.connect(lambda value, label=label, type_=type_: label.setText(f"{type_}: {value/100}"))
+                row += 1
 
         def _create_sliders(self):
             label_roll = QLabel("Roll")
@@ -341,12 +377,27 @@ def main(input_path: str):
             scaling_modifier = self.scaling_slider.value() / 100.0
             explosion = self.explosion_slider.value() / 100.0
 
+            x_minus = self.x_minus_slider.value() / 100
+            x_plus = self.x_plus_slider.value() / 100
+            y_minus = self.y_minus_slider.value() / 100
+            y_plus = self.y_plus_slider.value() / 100
+            z_minus = self.z_minus_slider.value() / 100
+            z_plus = self.z_plus_slider.value() / 100
+
+            mask = (means[:, 0] > x_minus) & (means[:, 0] < x_plus) & (means[:, 1] > y_minus) & (means[:, 1] < y_plus) & (means[:, 2] > z_minus) & (means[:, 2] < z_plus)
+            
+            means_filtered = means[mask]
+            quats_filtered = quats[mask]
+            scales_filtered = scales[mask]
+            opacities_filtered = opacities[mask]
+            colors_filtered = colors[mask]
+
             output, _, meta = rasterization(
-                means * explosion,
-                quats,
-                scales * scaling_modifier,
-                opacities,
-                colors,
+                means_filtered * explosion,
+                quats_filtered,
+                scales_filtered * scaling_modifier,
+                opacities_filtered,
+                colors_filtered,
                 viewmat[None],
                 K[None],
                 width=width,
