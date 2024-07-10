@@ -108,6 +108,50 @@ def main(input_path: str):
             self._create_sliders()
             self._create_intrinsic_panel()
             self._create_extends_panel()
+            self._create_world_offset_panel()
+
+        def _create_world_offset_panel(self):
+            self.world_offset_frame = QFrame()
+            self.sidebar.addWidget(self.world_offset_frame)
+            self.world_offset_layout = QGridLayout(self.world_offset_frame)
+            self.world_offset_frame.setLayout(self.world_offset_layout)
+            self.world_offset_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+            
+            roll_label = QLabel("Roll")
+            pitch_label = QLabel("Pitch")
+            yaw_label = QLabel("Yaw")
+            x_label = QLabel("X")
+            y_label = QLabel("Y")
+            z_label = QLabel("Z")
+            roll_slider = QSlider()
+            pitch_slider = QSlider()
+            yaw_slider = QSlider()
+            x_slider = QSlider()
+            y_slider = QSlider()
+            z_slider = QSlider()
+
+            self.world_offset_roll_slider = roll_slider
+            self.world_offset_pitch_slider = pitch_slider
+            self.world_offset_yaw_slider = yaw_slider
+            self.world_offset_x_slider = x_slider
+            self.world_offset_y_slider = y_slider
+            self.world_offset_z_slider = z_slider
+
+            row = 0
+            for slider, label, type_ in zip([roll_slider, pitch_slider, yaw_slider, x_slider, y_slider, z_slider], [roll_label, pitch_label, yaw_label, x_label, y_label, z_label], ["roll", "pitch", "yaw", "x", "y", "z"]):
+                slider.setMinimum(-180)
+                slider.setMaximum(180)
+                if type_ in ["x", "y", "z"]:
+                    slider.setMinimum(-1000)
+                    slider.setMaximum(1000)
+                    slider.setValue(0)
+                slider.setValue(0)
+                slider.setOrientation(1)
+                label.setText(f"{type_}: {slider.value()}")
+                self.world_offset_layout.addWidget(label, row, 0)
+                self.world_offset_layout.addWidget(slider, row, 1)
+                slider.valueChanged.connect(lambda value, label=label, type_=type_: label.setText(f"{type_}: {value}"))
+                row += 1
 
         def _create_window(self):
             window = QMainWindow()
@@ -384,7 +428,30 @@ def main(input_path: str):
             z_minus = self.z_minus_slider.value() / 100
             z_plus = self.z_plus_slider.value() / 100
 
-            mask = (means[:, 0] > x_minus) & (means[:, 0] < x_plus) & (means[:, 1] > y_minus) & (means[:, 1] < y_plus) & (means[:, 2] > z_minus) & (means[:, 2] < z_plus)
+            roll_offset = self.world_offset_roll_slider.value()
+            pitch_offset = self.world_offset_pitch_slider.value()
+            yaw_offset = self.world_offset_yaw_slider.value()
+            x_offset = self.world_offset_x_slider.value() / 100
+            y_offset = self.world_offset_y_slider.value() / 100
+            z_offset = self.world_offset_z_slider.value() / 100
+
+            roll_offset = np.deg2rad(roll_offset)
+            pitch_offset = np.deg2rad(pitch_offset)
+            yaw_offset = np.deg2rad(yaw_offset)
+
+            world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
+            world_offset_mtx[0, 3] = x_offset
+            world_offset_mtx[1, 3] = y_offset
+            world_offset_mtx[2, 3] = z_offset
+
+            world_offset_mtx = world_offset_mtx.T
+
+            # points_3d_wrt_camera = viewmat_np @ world_offset_mtx @ points_3d.T
+            new_means = torch.tensor(world_offset_mtx[:3,:3]).float().cuda() @ means.T #+ torch.tensor([[x_offset, y_offset, z_offset]]).float().cuda()
+            new_means = new_means.T - torch.tensor(world_offset_mtx.T[:3,3]).float().cuda()
+            print(new_means.shape)
+
+            mask = (new_means[:, 0] > x_minus) & (new_means[:, 0] < x_plus) & (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
             
             means_filtered = means[mask]
             quats_filtered = quats[mask]
@@ -429,7 +496,23 @@ def main(input_path: str):
                 ]
             ).astype(np.float32)
 
-            points_3d_wrt_camera = viewmat_np @ points_3d.T
+            roll_offset = self.world_offset_roll_slider.value()
+            pitch_offset = self.world_offset_pitch_slider.value()
+            yaw_offset = self.world_offset_yaw_slider.value()
+            x_offset = self.world_offset_x_slider.value() / 100
+            y_offset = self.world_offset_y_slider.value() / 100
+            z_offset = self.world_offset_z_slider.value() / 100
+
+            roll_offset = np.deg2rad(roll_offset)
+            pitch_offset = np.deg2rad(pitch_offset)
+            yaw_offset = np.deg2rad(yaw_offset)
+
+            world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
+            world_offset_mtx[0, 3] = x_offset
+            world_offset_mtx[1, 3] = y_offset
+            world_offset_mtx[2, 3] = z_offset
+
+            points_3d_wrt_camera = viewmat_np @ world_offset_mtx @ points_3d.T
             points_2d = K_np @ points_3d_wrt_camera[:3, :]
             points_2d /= points_2d[2, :]
             points_2d = points_2d[:2, :].T
