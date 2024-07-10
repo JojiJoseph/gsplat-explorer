@@ -11,8 +11,20 @@ from PyQt5.QtWidgets import (
     QScrollArea,
     QScrollBar,
     QSlider,
+    QGridLayout,
+    QFrame,
+    QTextEdit,
+    QLineEdit,
+    QHBoxLayout
 )
-from PyQt5.QtGui import QPixmap, QImage, QPainter, QColor, QColorConstants
+from PyQt5.QtGui import (
+    QPixmap,
+    QImage,
+    QPainter,
+    QColor,
+    QColorConstants,
+    QDoubleValidator,
+)
 from PyQt5.QtCore import QTimer
 
 import numpy as np
@@ -73,11 +85,9 @@ def main(input_path: str):
             .to(device)
         )
 
-    # metadata["height"] = 83
 
     if "width" not in metadata:
         metadata["width"] = 1267
-        # width = metadata["width"]
     if "height" not in metadata:
         metadata["height"] = 832
 
@@ -96,6 +106,7 @@ def main(input_path: str):
             self._create_window()
             self._create_viewport()
             self._create_sliders()
+            self._create_intrinsic_panel()
 
         def _create_window(self):
             window = QMainWindow()
@@ -109,44 +120,150 @@ def main(input_path: str):
         def _create_viewport(self):
             self.viewport = QLabel()
             scroll_area = QScrollArea()
-            self.layout.addWidget(scroll_area)
+            self.sidebar = QVBoxLayout()
+            viewport_and_sidebar = QHBoxLayout()
+            self.layout.addLayout(viewport_and_sidebar)
+            viewport_and_sidebar.addWidget(scroll_area, 2)
             scroll_area.setWidget(self.viewport)
             scroll_area.setWidgetResizable(True)
+            scroll_area_2 = QScrollArea()
+            viewport_and_sidebar.addWidget(scroll_area_2)
+            scroll_area_2.setLayout(self.sidebar)
+
+        def _create_intrinsic_panel(self):
+            self.intrinsics_frame = QFrame()
+            self.sidebar.addWidget(self.intrinsics_frame)
+            self.intrinsics_layout = QGridLayout(self.intrinsics_frame)
+            self.intrinsics_frame.setLayout(self.intrinsics_layout)
+            self.intrinsics_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+            fx_label = QLabel("fx")
+            fy_label = QLabel("fy")
+            cx_label = QLabel("cx")
+            cy_label = QLabel("cy")
+            width_label = QLabel("width")
+            height_label = QLabel("height")
+            self.fx_input = QLineEdit()
+            self.fy_input = QLineEdit()
+            self.cx_input = QLineEdit()
+            self.cy_input = QLineEdit()
+            self.width_input = QLineEdit()
+            self.height_input = QLineEdit()
+            self.fx_input.setText(str(K[0, 0].item()))
+            self.fy_input.setText(str(K[1, 1].item()))
+            self.cx_input.setText(str(K[0, 2].item()))
+            self.cy_input.setText(str(K[1, 2].item()))
+            self.width_input.setText(str(metadata["width"]))
+            self.height_input.setText(str(metadata["height"]))
+            for input_ in [
+                self.fx_input,
+                self.fy_input,
+                self.cx_input,
+                self.cy_input,
+                self.width_input,
+                self.height_input,
+            ]:
+                input_.setValidator(QDoubleValidator(input_))
+            self.intrinsics_layout.addWidget(fx_label, 0, 0)
+            self.intrinsics_layout.addWidget(fy_label, 1, 0)
+            self.intrinsics_layout.addWidget(cx_label, 2, 0)
+            self.intrinsics_layout.addWidget(cy_label, 3, 0)
+            self.intrinsics_layout.addWidget(width_label, 4, 0)
+            self.intrinsics_layout.addWidget(height_label, 5, 0)
+            self.intrinsics_layout.addWidget(self.fx_input, 0, 1)
+            self.intrinsics_layout.addWidget(self.fy_input, 1, 1)
+            self.intrinsics_layout.addWidget(self.cx_input, 2, 1)
+            self.intrinsics_layout.addWidget(self.cy_input, 3, 1)
+            self.intrinsics_layout.addWidget(self.width_input, 4, 1)
+            self.intrinsics_layout.addWidget(self.height_input, 5, 1)
 
         def _create_sliders(self):
+            label_roll = QLabel("Roll")
+            label_pitch = QLabel("Pitch")
+            label_yaw = QLabel("Yaw")
             slider_roll = QSlider()
             slider_pitch = QSlider()
             slider_yaw = QSlider()
             x_slider = QSlider()
             y_slider = QSlider()
             z_slider = QSlider()
-            for slider in [slider_roll, slider_pitch, slider_yaw]:
+            self.slider_grid = QGridLayout()
+            self.layout.addLayout(self.slider_grid)
+
+            row_ = 0
+            for slider, label, type_ in zip(
+                [slider_roll, slider_pitch, slider_yaw],
+                [label_roll, label_pitch, label_yaw],
+                ["roll", "pitch", "yaw"],
+            ):
                 slider.setMinimum(-180)
                 slider.setMaximum(180)
                 slider.setValue(0)
                 slider.setOrientation(1)
-                self.layout.addWidget(slider)
+                # self.layout.addWidget(slider)
+                label.setText(f"{type_}: {slider.value()}")
+                self.slider_grid.addWidget(label, row_, 0)
+                self.slider_grid.addWidget(slider, row_, 1)
+                slider.valueChanged.connect(
+                    lambda value, label=label, type_=type_: label.setText(
+                        f"{type_}: {value}"
+                    )
+                )
+                row_ += 1
 
-            for slider in [x_slider, y_slider, z_slider]:
+            label_x = QLabel("X")
+            label_y = QLabel("Y")
+            label_z = QLabel("Z")
+
+            for slider, label, type_ in zip(
+                [x_slider, y_slider, z_slider],
+                [label_x, label_y, label_z],
+                ["x", "y", "z"],
+            ):
                 slider.setMinimum(-1000)
                 slider.setMaximum(1000)
                 slider.setValue(0)
                 slider.setOrientation(1)
-                self.layout.addWidget(slider)
+                # self.layout.addWidget(slider)
+                label.setText(f"{type_}: {slider.value()}")
+                self.slider_grid.addWidget(label, row_, 0)
+                self.slider_grid.addWidget(slider, row_, 1)
+                slider.valueChanged.connect(
+                    lambda value, label=label, type_=type_: label.setText(
+                        f"{type_}: {value/100}"
+                    )
+                )
+                row_ += 1
+
+            scaling_label = QLabel("Scaling: 1.0")
 
             scaling_slider = QSlider()
             scaling_slider.setMinimum(0)
             scaling_slider.setMaximum(100)
             scaling_slider.setValue(100)
             scaling_slider.setOrientation(1)
-            self.layout.addWidget(scaling_slider)
+            self.slider_grid.addWidget(scaling_label, row_, 0)
+            self.slider_grid.addWidget(scaling_slider, row_, 1)
+            scaling_slider.valueChanged.connect(
+                lambda value, label=scaling_label: label.setText(
+                    f"Scaling: {value/100}"
+                )
+            )
+            row_ += 1
+
+            explosion_label = QLabel("Explosion: 1.0")
 
             explosion_slider = QSlider()
             explosion_slider.setMinimum(0)
             explosion_slider.setMaximum(200)
             explosion_slider.setValue(100)
             explosion_slider.setOrientation(1)
-            self.layout.addWidget(explosion_slider)
+            self.slider_grid.addWidget(explosion_label, row_, 0)
+            self.slider_grid.addWidget(explosion_slider, row_, 1)
+            explosion_slider.valueChanged.connect(
+                lambda value, label=explosion_label: label.setText(
+                    f"Explosion: {value/100}"
+                )
+            )
 
             self.slider_roll = slider_roll
             self.slider_pitch = slider_pitch
@@ -183,6 +300,25 @@ def main(input_path: str):
             viewmat[2, 3] = self.z_slider.value() / 100.0
             return viewmat
 
+        def _get_K_from_panel(self):
+            fx = float(self.fx_input.text() or "0")
+            fy = float(self.fy_input.text() or "0")
+            cx = float(self.cx_input.text() or "0")
+            cy = float(self.cy_input.text() or "0")
+            width = int(self.width_input.text() or "0")
+            height = int(self.height_input.text() or "0")
+
+            # Clamp values and update input fields
+            fx = np.clip(fx, 100, 3000)
+            fy = np.clip(fy, 100, 3000)
+            cx = np.clip(cx, -3000, 3000)
+            cy = np.clip(cy, -3000, 3000)
+            width = np.clip(width, 1, 3000)
+            height = np.clip(height, 1, 3000)
+
+            K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]]).float().to(device)
+            return K, width, height
+
         def _torch_to_qimage(self, output):
             output = output.cpu().numpy()
             output = (np.clip(output, 0, 1) * 255).astype(np.uint8)
@@ -200,6 +336,7 @@ def main(input_path: str):
 
             pixmap = QPixmap()
             viewmat = self._get_viewmat_from_sliders()
+            K, width, height = self._get_K_from_panel()
 
             scaling_modifier = self.scaling_slider.value() / 100.0
             explosion = self.explosion_slider.value() / 100.0
@@ -212,8 +349,8 @@ def main(input_path: str):
                 colors,
                 viewmat[None],
                 K[None],
-                width=metadata["width"],
-                height=metadata["height"],
+                width=width,
+                height=height,
                 sh_degree=3,
             )
             image = self._torch_to_qimage(output[0])
