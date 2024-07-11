@@ -444,12 +444,9 @@ def main(input_path: str):
             world_offset_mtx[1, 3] = y_offset
             world_offset_mtx[2, 3] = z_offset
 
-            world_offset_mtx = world_offset_mtx.T
-
-            # points_3d_wrt_camera = viewmat_np @ world_offset_mtx @ points_3d.T
-            new_means = torch.tensor(world_offset_mtx[:3,:3]).float().cuda() @ means.T #+ torch.tensor([[x_offset, y_offset, z_offset]]).float().cuda()
-            new_means = new_means.T - torch.tensor(world_offset_mtx.T[:3,3]).float().cuda()
-            print(new_means.shape)
+  
+            new_means = torch.tensor(world_offset_mtx[:3,:3]).float().cuda() @ means.T
+            new_means = new_means.T + torch.tensor(world_offset_mtx[:3,3]).float().cuda()
 
             mask = (new_means[:, 0] > x_minus) & (new_means[:, 0] < x_plus) & (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
             
@@ -506,6 +503,7 @@ def main(input_path: str):
             roll_offset = np.deg2rad(roll_offset)
             pitch_offset = np.deg2rad(pitch_offset)
             yaw_offset = np.deg2rad(yaw_offset)
+
 
             world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
             world_offset_mtx[0, 3] = x_offset

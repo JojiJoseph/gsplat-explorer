@@ -5,31 +5,6 @@ from gsplat import rasterization
 import cv2
 
 
-# from PyQt5.QtWidgets import (
-#     QApplication,
-#     QLabel,
-#     QMainWindow,
-#     QVBoxLayout,
-#     QWidget,
-#     QScrollArea,
-#     QScrollBar,
-#     QSlider,
-#     QGridLayout,
-#     QFrame,
-#     QTextEdit,
-#     QLineEdit,
-#     QHBoxLayout,
-# )
-# from PyQt5.QtGui import (
-#     QPixmap,
-#     QImage,
-#     QPainter,
-#     QColor,
-#     QColorConstants,
-#     QDoubleValidator,
-# )
-# from PyQt5.QtCore import QTimer
-
 import numpy as np
 import json
 import tyro
@@ -88,7 +63,6 @@ def main(input_path: str):
             .to(device)
         )
 
-
     if "width" not in metadata:
         metadata["width"] = 1267
     if "height" not in metadata:
@@ -111,7 +85,7 @@ def main(input_path: str):
     cv2.createTrackbar("Y", "GSplat Explorer", 0, 1000, lambda x: None)
     cv2.createTrackbar("Z", "GSplat Explorer", 0, 1000, lambda x: None)
     cv2.createTrackbar("Scaling", "GSplat Explorer", 100, 100, lambda x: None)
-    
+
     cv2.setTrackbarMin("Roll", "GSplat Explorer", -180)
     cv2.setTrackbarMax("Roll", "GSplat Explorer", 180)
     cv2.setTrackbarMin("Pitch", "GSplat Explorer", -180)
@@ -128,8 +102,6 @@ def main(input_path: str):
     width = metadata["width"]
     height = metadata["height"]
 
-
-
     while True:
         roll = cv2.getTrackbarPos("Roll", "GSplat Explorer")
         pitch = cv2.getTrackbarPos("Pitch", "GSplat Explorer")
@@ -139,38 +111,40 @@ def main(input_path: str):
         pitch_rad = np.deg2rad(pitch)
         yaw_rad = np.deg2rad(yaw)
 
-        viewmat = torch.tensor(get_rpy_matrix(roll_rad, pitch_rad, yaw_rad)).float().to(device)
+        viewmat = (
+            torch.tensor(get_rpy_matrix(roll_rad, pitch_rad, yaw_rad))
+            .float()
+            .to(device)
+        )
         viewmat[0, 3] = cv2.getTrackbarPos("X", "GSplat Explorer") / 100.0
         viewmat[1, 3] = cv2.getTrackbarPos("Y", "GSplat Explorer") / 100.0
         viewmat[2, 3] = cv2.getTrackbarPos("Z", "GSplat Explorer") / 100.0
         output, _, meta = rasterization(
-                means,
-                quats,
-                scales,
-                opacities,
-                colors,
-                viewmat[None],
-                K[None],
-                width=width,
-                height=height,
-                sh_degree=3,
+            means,
+            quats,
+            scales,
+            opacities,
+            colors,
+            viewmat[None],
+            K[None],
+            width=width,
+            height=height,
+            sh_degree=3,
         )
-            
+
         output_cv = torch_to_cv(output[0])
         cv2.imshow("GSplat Explorer", output_cv)
         key = cv2.waitKey(1)
         if key == ord("q"):
             break
 
+
 def torch_to_cv(tensor, permute=False):
     if permute:
-        tensor =  torch.clamp(tensor.permute(1, 2, 0), 0, 1).cpu().numpy()
+        tensor = torch.clamp(tensor.permute(1, 2, 0), 0, 1).cpu().numpy()
     else:
-        tensor =  torch.clamp(tensor, 0, 1).cpu().numpy()
-    return (tensor * 255).astype(np.uint8)[...,::-1]
-
-
-    
+        tensor = torch.clamp(tensor, 0, 1).cpu().numpy()
+    return (tensor * 255).astype(np.uint8)[..., ::-1]
 
 
 if __name__ == "__main__":
