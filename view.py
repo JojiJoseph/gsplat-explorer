@@ -107,7 +107,7 @@ def main(input_path: str):
             self._create_viewport()
             self._create_sliders()
             self._create_intrinsic_panel()
-            self._create_extends_panel()
+            self._create_extents_panel()
             self._create_world_offset_panel()
 
         def _create_world_offset_panel(self):
@@ -221,12 +221,12 @@ def main(input_path: str):
             self.intrinsics_layout.addWidget(self.width_input, 4, 1)
             self.intrinsics_layout.addWidget(self.height_input, 5, 1)
 
-        def _create_extends_panel(self):
-            self.extends_frame = QFrame()
-            self.sidebar.addWidget(self.extends_frame)
-            self.extends_layout = QGridLayout(self.extends_frame)
-            self.extends_frame.setLayout(self.extends_layout)
-            self.extends_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
+        def _create_extents_panel(self):
+            self.extents_frame = QFrame()
+            self.sidebar.addWidget(self.extents_frame)
+            self.extents_layout = QGridLayout(self.extents_frame)
+            self.extents_frame.setLayout(self.extents_layout)
+            self.extents_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
             x_minus_label = QLabel("X-")
             x_plus_label = QLabel("X+")
             y_minus_label = QLabel("Y-")
@@ -251,8 +251,8 @@ def main(input_path: str):
                     slider.setValue(-2000)
                 slider.setOrientation(1)
                 label.setText(f"{type_}: {slider.value()/100}")
-                self.extends_layout.addWidget(label, row, 0)
-                self.extends_layout.addWidget(slider, row, 1)
+                self.extents_layout.addWidget(label, row, 0)
+                self.extents_layout.addWidget(slider, row, 1)
                 slider.valueChanged.connect(lambda value, label=label, type_=type_: label.setText(f"{type_}: {value/100}"))
                 row += 1
 
@@ -411,6 +411,23 @@ def main(input_path: str):
             )
             return image
 
+        def _get_offset_mtx_from_panel(self):
+                roll_offset = self.world_offset_roll_slider.value()
+                pitch_offset = self.world_offset_pitch_slider.value()
+                yaw_offset = self.world_offset_yaw_slider.value()
+                x_offset = self.world_offset_x_slider.value() / 100
+                y_offset = self.world_offset_y_slider.value() / 100
+                z_offset = self.world_offset_z_slider.value() / 100
+
+                roll_offset = np.deg2rad(roll_offset)
+                pitch_offset = np.deg2rad(pitch_offset)
+                yaw_offset = np.deg2rad(yaw_offset)
+
+                world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
+                world_offset_mtx[0, 3] = x_offset
+                world_offset_mtx[1, 3] = y_offset
+                world_offset_mtx[2, 3] = z_offset
+                return world_offset_mtx
         def loop(self):
             nonlocal K, means, quats, scales, opacities, colors
 
@@ -428,27 +445,17 @@ def main(input_path: str):
             z_minus = self.z_minus_slider.value() / 100
             z_plus = self.z_plus_slider.value() / 100
 
-            roll_offset = self.world_offset_roll_slider.value()
-            pitch_offset = self.world_offset_pitch_slider.value()
-            yaw_offset = self.world_offset_yaw_slider.value()
-            x_offset = self.world_offset_x_slider.value() / 100
-            y_offset = self.world_offset_y_slider.value() / 100
-            z_offset = self.world_offset_z_slider.value() / 100
+            
 
-            roll_offset = np.deg2rad(roll_offset)
-            pitch_offset = np.deg2rad(pitch_offset)
-            yaw_offset = np.deg2rad(yaw_offset)
-
-            world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
-            world_offset_mtx[0, 3] = x_offset
-            world_offset_mtx[1, 3] = y_offset
-            world_offset_mtx[2, 3] = z_offset
-
+            
+            world_offset_mtx = self._get_offset_mtx_from_panel()
+            to_new_world = np.linalg.inv(world_offset_mtx)
   
-            new_means = torch.tensor(world_offset_mtx[:3,:3]).float().cuda() @ means.T
-            new_means = new_means.T + torch.tensor(world_offset_mtx[:3,3]).float().cuda()
+            new_means = torch.tensor(to_new_world[:3,:3]).float().cuda() @ means.T
+            new_means = new_means.T + torch.tensor(to_new_world[:3,3]).float().cuda().T
+            # new_means = new_means.T
 
-            mask = (new_means[:, 0] > x_minus) & (new_means[:, 0] < x_plus) & (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
+            mask = (new_means[:, 0] > x_minus) & (new_means[:, 0] < x_plus) #& (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
             
             means_filtered = means[mask]
             quats_filtered = quats[mask]
