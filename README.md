@@ -16,7 +16,7 @@ An example file looks like the following.
 ```json
 {
     "type": "gaussian-splatting",
-    "checkpoint": "data/teatime/chkpnt30000.pth",
+    "checkpoint": "teatime.pth",
     "intrinsics": {
         "fx": 517.3,
         "fy": 516.5,
@@ -28,6 +28,9 @@ An example file looks like the following.
 }
 ```
 The checkpoint can be obtained with https://github.com/graphdeco-inria/gaussian-splatting
+
+
+Click [here](https://drive.google.com/file/d/1cAOhitE3u8ADUR0X6-14VmVzafnyerti/view?usp=sharing) to download a sample checkpoint and json.
 
 # Demo
 
