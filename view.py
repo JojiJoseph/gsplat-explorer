@@ -100,10 +100,13 @@ def main(input_path: str):
     scales = torch.exp(scales)
     colors = torch.cat([splats["features_dc"], splats["features_rest"]], 1)
 
+    
+
     class GaussianSplatViewer(QApplication):
         def __init__(self, argv: torch.List[str]) -> None:
             super().__init__(argv)
             self._create_window()
+            self._create_menu()
             self._create_viewport()
             self._create_sliders()
             self._create_intrinsic_panel()
@@ -161,6 +164,25 @@ def main(input_path: str):
             self.window = window
             layout = QVBoxLayout(self.window.centralWidget())
             self.layout = layout
+
+            self.show_anaglyph = False
+
+        def _toggle_anaglyph(self):
+            
+            self.show_anaglyph = not self.show_anaglyph
+
+        def _create_menu(self):
+            file_menu = self.window.menuBar().addMenu("File")
+            action = file_menu.addAction("Quit")
+            action.triggered.connect(self.window.close)
+            action.setShortcut("Ctrl+Q")
+
+            view_menu = self.window.menuBar().addMenu("View")
+            toggle_anaglyph_action = view_menu.addAction("Anaglyph 3D")
+            toggle_anaglyph_action.setCheckable(True)
+            toggle_anaglyph_action.triggered.connect(lambda: self._toggle_anaglyph())
+            toggle_anaglyph_action.setShortcut("Ctrl+3")
+
 
         def _create_viewport(self):
             self.viewport = QLabel()
@@ -475,6 +497,24 @@ def main(input_path: str):
                 height=height,
                 sh_degree=3,
             )
+            if self.show_anaglyph:
+                viewmat[0, 3] = viewmat[0, 3] - 0.05
+                output_left = output
+                output_right, _, meta = rasterization(
+                    means_filtered * explosion,
+                    quats_filtered,
+                    scales_filtered * scaling_modifier,
+                    opacities_filtered,
+                    colors_filtered,
+                    viewmat[None],
+                    K[None],
+                    width=width,
+                    height=height,
+                    sh_degree=3,
+                )
+                output_left[..., 1:] = 0
+                output_right[...,0] = 0
+                output = output_left + output_right
             image = self._torch_to_qimage(output[0])
             pixmap.convertFromImage(image)
 
