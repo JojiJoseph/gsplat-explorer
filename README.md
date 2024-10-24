@@ -27,3 +27,10 @@ An example file looks like the following.
     "height": 480
 }
 ```
+The checkpoint can be obtained with https://github.com/graphdeco-inria/gaussian-splatting
+
+# Demo
+
+
+https://github.com/user-attachments/assets/09da4735-1c2a-4e3a-98a9-eec72355cd1d
+
