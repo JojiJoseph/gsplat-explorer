@@ -49,6 +49,8 @@ def main(input_path: str):
     K = torch.tensor([[1000, 0, 500], [0, 1000, 500], [0, 0, 1.0]])
     K = K.to(device)
 
+    show_anaglyph = False
+
     if "intrinsics" in metadata:
         intrinsics = metadata["intrinsics"]
         K = (
@@ -116,6 +118,7 @@ def main(input_path: str):
             .float()
             .to(device)
         )
+        
         viewmat[0, 3] = cv2.getTrackbarPos("X", "GSplat Explorer") / 100.0
         viewmat[1, 3] = cv2.getTrackbarPos("Y", "GSplat Explorer") / 100.0
         viewmat[2, 3] = cv2.getTrackbarPos("Z", "GSplat Explorer") / 100.0
@@ -133,10 +136,33 @@ def main(input_path: str):
         )
 
         output_cv = torch_to_cv(output[0])
+
+        if show_anaglyph:
+            viewmat[0, 3] = viewmat[0, 3]-0.05
+            output_left = output_cv
+            output, _, meta = rasterization(
+                means,
+                quats,
+                scales,
+                opacities,
+                colors,
+                viewmat[None],
+                K[None],
+                width=width,
+                height=height,
+                sh_degree=3,
+            )
+            output_right = torch_to_cv(output[0])
+            output_left[...,:2] = 0
+            output_right[...,-1] = 0
+            output_cv = output_left + output_right
+
         cv2.imshow("GSplat Explorer", output_cv)
         key = cv2.waitKey(1)
         if key == ord("q"):
             break
+        if key == ord("3"):
+            show_anaglyph = not show_anaglyph
 
 
 def torch_to_cv(tensor, permute=False):

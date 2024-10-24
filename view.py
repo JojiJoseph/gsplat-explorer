@@ -412,22 +412,22 @@ def main(input_path: str):
             return image
 
         def _get_offset_mtx_from_panel(self):
-                roll_offset = self.world_offset_roll_slider.value()
-                pitch_offset = self.world_offset_pitch_slider.value()
-                yaw_offset = self.world_offset_yaw_slider.value()
-                x_offset = self.world_offset_x_slider.value() / 100
-                y_offset = self.world_offset_y_slider.value() / 100
-                z_offset = self.world_offset_z_slider.value() / 100
+            roll_offset = self.world_offset_roll_slider.value()
+            pitch_offset = self.world_offset_pitch_slider.value()
+            yaw_offset = self.world_offset_yaw_slider.value()
+            x_offset = self.world_offset_x_slider.value() / 100
+            y_offset = self.world_offset_y_slider.value() / 100
+            z_offset = self.world_offset_z_slider.value() / 100
 
-                roll_offset = np.deg2rad(roll_offset)
-                pitch_offset = np.deg2rad(pitch_offset)
-                yaw_offset = np.deg2rad(yaw_offset)
+            roll_offset = np.deg2rad(roll_offset)
+            pitch_offset = np.deg2rad(pitch_offset)
+            yaw_offset = np.deg2rad(yaw_offset)
 
-                world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
-                world_offset_mtx[0, 3] = x_offset
-                world_offset_mtx[1, 3] = y_offset
-                world_offset_mtx[2, 3] = z_offset
-                return world_offset_mtx
+            world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
+            world_offset_mtx[0, 3] = x_offset
+            world_offset_mtx[1, 3] = y_offset
+            world_offset_mtx[2, 3] = z_offset
+            return world_offset_mtx
         def loop(self):
             nonlocal K, means, quats, scales, opacities, colors
 
