@@ -3,7 +3,7 @@
 import torch
 from gsplat import rasterization
 import cv2
-
+from scipy.spatial.transform import Rotation as scipyR
 
 import numpy as np
 import json
@@ -104,6 +104,19 @@ def main(input_path: str):
     width = metadata["width"]
     height = metadata["height"]
 
+    def update_trackbars_from_viewmat(world_to_camera):
+        # if torch tensor is passed, convert to numpy
+        if isinstance(world_to_camera, torch.Tensor):
+            world_to_camera = world_to_camera.cpu().numpy()
+        r = scipyR.from_matrix(world_to_camera[:3,:3])
+        roll, pitch, yaw = r.as_euler('xyz')
+        cv2.setTrackbarPos("Roll", "GSplat Explorer", np.rad2deg(roll).astype(int))
+        cv2.setTrackbarPos("Pitch", "GSplat Explorer", np.rad2deg(pitch).astype(int))
+        cv2.setTrackbarPos("Yaw", "GSplat Explorer", np.rad2deg(yaw).astype(int))
+        cv2.setTrackbarPos("X", "GSplat Explorer", int(world_to_camera[0, 3]*100))
+        cv2.setTrackbarPos("Y", "GSplat Explorer", int(world_to_camera[1, 3]*100))
+        cv2.setTrackbarPos("Z", "GSplat Explorer", int(world_to_camera[2, 3]*100))
+
     while True:
         roll = cv2.getTrackbarPos("Roll", "GSplat Explorer")
         pitch = cv2.getTrackbarPos("Pitch", "GSplat Explorer")
@@ -112,6 +125,8 @@ def main(input_path: str):
         roll_rad = np.deg2rad(roll)
         pitch_rad = np.deg2rad(pitch)
         yaw_rad = np.deg2rad(yaw)
+
+        scaling = cv2.getTrackbarPos("Scaling", "GSplat Explorer") / 100.0
 
         viewmat = (
             torch.tensor(get_rpy_matrix(roll_rad, pitch_rad, yaw_rad))
@@ -125,7 +140,7 @@ def main(input_path: str):
         output, _, meta = rasterization(
             means,
             quats,
-            scales,
+            scales * scaling,
             opacities,
             colors,
             viewmat[None],
@@ -143,7 +158,7 @@ def main(input_path: str):
             output, _, meta = rasterization(
                 means,
                 quats,
-                scales,
+                scales * scaling,
                 opacities,
                 colors,
                 viewmat[None],
@@ -158,11 +173,24 @@ def main(input_path: str):
             output_cv = output_left + output_right
 
         cv2.imshow("GSplat Explorer", output_cv)
-        key = cv2.waitKey(1)
+        full_key = cv2.waitKeyEx(1)
+        key = full_key & 0xFF
         if key == ord("q"):
             break
         if key == ord("3"):
             show_anaglyph = not show_anaglyph
+        if key in [ord("w"), ord("a"), ord("s"), ord("d")]:
+            if key == ord("w"):
+                viewmat[2, 3] -= 0.1
+            if key == ord("s"):
+                viewmat[2, 3] += 0.1
+            if key == ord("a"):
+                viewmat[0, 3] += 0.1
+            if key == ord("d"):
+                viewmat[0, 3] -= 0.1
+            update_trackbars_from_viewmat(viewmat)
+            
+            
 
 
 def torch_to_cv(tensor, permute=False):
