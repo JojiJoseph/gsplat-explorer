@@ -8,7 +8,7 @@ This is a tool for exploring Gaussian Splats.
 python view.py --input_path path/to/ply --format ply
 ```
 
-Supported formats are .ply, .pth (inria), .pth (gsplat)
+Supported formats are ply, inria and gsplat
 
 The checkpoint can be obtained with https://github.com/graphdeco-inria/gaussian-splatting
 
