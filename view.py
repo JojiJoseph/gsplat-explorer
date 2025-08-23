@@ -49,12 +49,10 @@ def _detach_tensors_from_dict(d, inplace=True):
     return d
 
 
-def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply", "inria", "gsplat"]="ply"):
-    metadata = {}
+def load_gaussian_splats_from_input_file(
+    input_path: str, format: Literal["ply", "inria", "gsplat"] = "ply"
+):
     if format == "inria":
-        # with open(input_path, "r") as f:
-        #     metadata = json.load(f)
-        # checkpoint_path = metadata["checkpoint"]
         model_params, _ = torch.load(input_path, weights_only=False)
 
         splats = {
@@ -80,18 +78,22 @@ def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply",
         }
     elif format == "ply":
         plydata = PlyData.read(input_path)
-        vertex = plydata['vertex'].data
+        vertex = plydata["vertex"].data
 
         def to_tensor(name, dtype=torch.float32):
-            return torch.tensor(np.stack([v[name] for v in vertex]), dtype=dtype).to(device)
+            return torch.tensor(np.stack([v[name] for v in vertex]), dtype=dtype).to(
+                device
+            )
 
         splats = {
             "active_sh_degree": 3,
             "xyz": torch.stack([to_tensor("x"), to_tensor("y"), to_tensor("z")], dim=1),
-            "features_dc": torch.stack([to_tensor("f_dc_0"), to_tensor("f_dc_1"), to_tensor("f_dc_2")], dim=1).reshape((-1,1,3)),
+            "features_dc": torch.stack(
+                [to_tensor("f_dc_0"), to_tensor("f_dc_1"), to_tensor("f_dc_2")], dim=1
+            ).reshape((-1, 1, 3)),
             "features_rest": torch.stack(
                 [to_tensor(f"f_rest_{i}") for i in range(45)], dim=1
-            ).reshape((-1,15,3)),
+            ).reshape((-1, 15, 3)),
             "scaling": torch.stack([to_tensor(f"scale_{i}") for i in range(3)], dim=1),
             "rotation": torch.stack([to_tensor(f"rot_{i}") for i in range(4)], dim=1),
             "opacity": to_tensor("opacity"),
@@ -100,36 +102,28 @@ def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply",
     else:
         raise ValueError("Invalid Gaussian splatting format")
 
-
     _detach_tensors_from_dict(splats)
 
-    return splats, metadata
+    return splats
 
 
-def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
-    splats, metadata = load_gaussian_splats_from_input_file(input_path, format)
-    K = torch.tensor([[1000, 0, 500], [0, 1000, 500], [0, 0, 1.0]])
+def main(
+    input_path: str,
+    format: Literal["ply", "inria", "gsplat"] = "ply",
+    fx: float = 1000,
+    fy: float = 1000,
+    cx: float = 320,
+    cy: float = 240,
+    width: float = 640,
+    height: float = 480,
+):
+    splats = load_gaussian_splats_from_input_file(input_path, format)
+    K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]])
     K = K.to(device)
 
-    if "intrinsics" in metadata:
-        intrinsics = metadata["intrinsics"]
-        K = (
-            torch.tensor(
-                [
-                    [intrinsics["fx"], 0, intrinsics["cx"]],
-                    [0, intrinsics["fy"], intrinsics["cy"]],
-                    [0, 0, 1.0],
-                ]
-            )
-            .float()
-            .to(device)
-        )
-
-
-    if "width" not in metadata:
-        metadata["width"] = 1267
-    if "height" not in metadata:
-        metadata["height"] = 832
+    metadata = {}
+    metadata["width"] = width
+    metadata["height"] = height
 
     means = splats["xyz"].float()
     opacities = splats["opacity"]
@@ -139,8 +133,6 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
     opacities = torch.sigmoid(opacities)
     scales = torch.exp(scales)
     colors = torch.cat([splats["features_dc"], splats["features_rest"]], 1)
-
-    
 
     class GaussianSplatViewer(QApplication):
         def __init__(self, argv) -> None:
@@ -159,7 +151,7 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             self.world_offset_layout = QGridLayout(self.world_offset_frame)
             self.world_offset_frame.setLayout(self.world_offset_layout)
             self.world_offset_frame.setFrameStyle(QFrame.Panel | QFrame.Raised)
-            
+
             roll_label = QLabel("Roll")
             pitch_label = QLabel("Pitch")
             yaw_label = QLabel("Yaw")
@@ -181,7 +173,11 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             self.world_offset_z_slider = z_slider
 
             row = 0
-            for slider, label, type_ in zip([roll_slider, pitch_slider, yaw_slider, x_slider, y_slider, z_slider], [roll_label, pitch_label, yaw_label, x_label, y_label, z_label], ["roll", "pitch", "yaw", "x", "y", "z"]):
+            for slider, label, type_ in zip(
+                [roll_slider, pitch_slider, yaw_slider, x_slider, y_slider, z_slider],
+                [roll_label, pitch_label, yaw_label, x_label, y_label, z_label],
+                ["roll", "pitch", "yaw", "x", "y", "z"],
+            ):
                 slider.setMinimum(-180)
                 slider.setMaximum(180)
                 if type_ in ["x", "y", "z"]:
@@ -193,7 +189,11 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
                 label.setText(f"{type_}: {slider.value()}")
                 self.world_offset_layout.addWidget(label, row, 0)
                 self.world_offset_layout.addWidget(slider, row, 1)
-                slider.valueChanged.connect(lambda value, label=label, type_=type_: label.setText(f"{type_}: {value}"))
+                slider.valueChanged.connect(
+                    lambda value, label=label, type_=type_: label.setText(
+                        f"{type_}: {value}"
+                    )
+                )
                 row += 1
 
         def _create_window(self):
@@ -208,7 +208,7 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             self.show_anaglyph = False
 
         def _toggle_anaglyph(self):
-            
+
             self.show_anaglyph = not self.show_anaglyph
 
         def _create_menu(self):
@@ -222,7 +222,6 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             toggle_anaglyph_action.setCheckable(True)
             toggle_anaglyph_action.triggered.connect(lambda: self._toggle_anaglyph())
             toggle_anaglyph_action.setShortcut("Ctrl+3")
-
 
         def _create_viewport(self):
             self.viewport = QLabel()
@@ -295,7 +294,7 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             y_plus_label = QLabel("Y+")
             z_minus_label = QLabel("Z-")
             z_plus_label = QLabel("Z+")
-            
+
             self.x_minus_slider = QSlider()
             self.x_plus_slider = QSlider()
             self.y_minus_slider = QSlider()
@@ -304,7 +303,25 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             self.z_plus_slider = QSlider()
 
             row = 0
-            for slider, label, type_ in zip([self.x_minus_slider, self.x_plus_slider, self.y_minus_slider, self.y_plus_slider, self.z_minus_slider, self.z_plus_slider], [x_minus_label, x_plus_label, y_minus_label, y_plus_label, z_minus_label, z_plus_label], ["x-", "x+", "y-", "y+", "z-", "z+"]):
+            for slider, label, type_ in zip(
+                [
+                    self.x_minus_slider,
+                    self.x_plus_slider,
+                    self.y_minus_slider,
+                    self.y_plus_slider,
+                    self.z_minus_slider,
+                    self.z_plus_slider,
+                ],
+                [
+                    x_minus_label,
+                    x_plus_label,
+                    y_minus_label,
+                    y_plus_label,
+                    z_minus_label,
+                    z_plus_label,
+                ],
+                ["x-", "x+", "y-", "y+", "z-", "z+"],
+            ):
                 slider.setMinimum(-2000)
                 slider.setMaximum(2000)
                 if type_[-1] == "+":
@@ -315,7 +332,11 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
                 label.setText(f"{type_}: {slider.value()/100}")
                 self.extents_layout.addWidget(label, row, 0)
                 self.extents_layout.addWidget(slider, row, 1)
-                slider.valueChanged.connect(lambda value, label=label, type_=type_: label.setText(f"{type_}: {value/100}"))
+                slider.valueChanged.connect(
+                    lambda value, label=label, type_=type_: label.setText(
+                        f"{type_}: {value/100}"
+                    )
+                )
                 row += 1
 
         def _create_sliders(self):
@@ -490,6 +511,7 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             world_offset_mtx[1, 3] = y_offset
             world_offset_mtx[2, 3] = z_offset
             return world_offset_mtx
+
         def loop(self):
             nonlocal K, means, quats, scales, opacities, colors
 
@@ -507,18 +529,17 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             z_minus = self.z_minus_slider.value() / 100
             z_plus = self.z_plus_slider.value() / 100
 
-            
-
-            
             world_offset_mtx = self._get_offset_mtx_from_panel()
             to_new_world = np.linalg.inv(world_offset_mtx)
-  
-            new_means = torch.tensor(to_new_world[:3,:3]).float().cuda() @ means.T
-            new_means = new_means.T + torch.tensor(to_new_world[:3,3]).float().cuda().T
+
+            new_means = torch.tensor(to_new_world[:3, :3]).float().cuda() @ means.T
+            new_means = new_means.T + torch.tensor(to_new_world[:3, 3]).float().cuda().T
             # new_means = new_means.T
 
-            mask = (new_means[:, 0] > x_minus) & (new_means[:, 0] < x_plus) #& (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
-            
+            mask = (new_means[:, 0] > x_minus) & (
+                new_means[:, 0] < x_plus
+            )  # & (new_means[:, 1] > y_minus) & (new_means[:, 1] < y_plus) & (new_means[:, 2] > z_minus) & (new_means[:, 2] < z_plus)
+
             means_filtered = means[mask]
             quats_filtered = quats[mask]
             scales_filtered = scales[mask]
@@ -553,7 +574,7 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
                     sh_degree=3,
                 )
                 output_left[..., 1:] = 0
-                output_right[...,0] = 0
+                output_right[..., 0] = 0
                 output = output_left + output_right
             image = self._torch_to_qimage(output[0])
             pixmap.convertFromImage(image)
@@ -590,7 +611,6 @@ def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
             roll_offset = np.deg2rad(roll_offset)
             pitch_offset = np.deg2rad(pitch_offset)
             yaw_offset = np.deg2rad(yaw_offset)
-
 
             world_offset_mtx = get_rpy_matrix(roll_offset, pitch_offset, yaw_offset)
             world_offset_mtx[0, 3] = x_offset

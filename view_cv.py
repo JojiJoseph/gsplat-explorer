@@ -28,11 +28,7 @@ def _detach_tensors_from_dict(d, inplace=True):
 
 
 def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply", "inria", "gsplat"]="ply"):
-    metadata = {}
     if format == "inria":
-        # with open(input_path, "r") as f:
-        #     metadata = json.load(f)
-        # checkpoint_path = metadata["checkpoint"]
         model_params, _ = torch.load(input_path, weights_only=False)
 
         splats = {
@@ -81,35 +77,28 @@ def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply",
 
     _detach_tensors_from_dict(splats)
 
-    return splats, metadata
+    return splats
 
 
-def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
+def main(
+    input_path: str,
+    format: Literal["ply", "inria", "gsplat"] = "ply",
+    fx: float = 1000,
+    fy: float = 1000,
+    cx: float = 320,
+    cy: float = 240,
+    width: float = 640,
+    height: float = 480,
+):
 
-    splats, metadata = load_gaussian_splats_from_input_file(input_path, format)
-    K = torch.tensor([[1000, 0, 500], [0, 1000, 500], [0, 0, 1.0]])
+    splats = load_gaussian_splats_from_input_file(input_path, format)
+    K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1.0]])
     K = K.to(device)
 
     show_anaglyph = False
-
-    if "intrinsics" in metadata:
-        intrinsics = metadata["intrinsics"]
-        K = (
-            torch.tensor(
-                [
-                    [intrinsics["fx"], 0, intrinsics["cx"]],
-                    [0, intrinsics["fy"], intrinsics["cy"]],
-                    [0, 0, 1.0],
-                ]
-            )
-            .float()
-            .to(device)
-        )
-
-    if "width" not in metadata:
-        metadata["width"] = 1267
-    if "height" not in metadata:
-        metadata["height"] = 832
+    metadata = {}
+    metadata["width"] = width
+    metadata["height"] = height
 
     means = splats["xyz"].float()
     opacities = splats["opacity"]
