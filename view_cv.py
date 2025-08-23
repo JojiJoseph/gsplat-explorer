@@ -1,9 +1,12 @@
 # Basic OpenCV viewer with sliders for rotation and translation.
 # Can be easily customizable to different use cases.
+from typing import Literal
 import torch
 from gsplat import rasterization
 import cv2
 from scipy.spatial.transform import Rotation as scipyR
+
+from plyfile import PlyData
 
 import numpy as np
 import json
@@ -12,6 +15,7 @@ import tyro
 from utils import get_rpy_matrix
 
 device = torch.device("cuda:0")
+torch.set_default_device(device)
 
 
 def _detach_tensors_from_dict(d, inplace=True):
@@ -23,29 +27,66 @@ def _detach_tensors_from_dict(d, inplace=True):
     return d
 
 
-def load_gaussian_splats_from_input_file(input_path: str):
-    with open(input_path, "r") as f:
-        metadata = json.load(f)
-    checkpoint_path = metadata["checkpoint"]
-    model_params, _ = torch.load(checkpoint_path)
+def load_gaussian_splats_from_input_file(input_path: str, format: Literal["ply", "inria", "gsplat"]="ply"):
+    metadata = {}
+    if format == "inria":
+        # with open(input_path, "r") as f:
+        #     metadata = json.load(f)
+        # checkpoint_path = metadata["checkpoint"]
+        model_params, _ = torch.load(input_path, weights_only=False)
 
-    splats = {
-        "active_sh_degree": model_params[0],
-        "xyz": model_params[1],
-        "features_dc": model_params[2],
-        "features_rest": model_params[3],
-        "scaling": model_params[4],
-        "rotation": model_params[5],
-        "opacity": model_params[6].squeeze(1),
-    }
+        splats = {
+            "active_sh_degree": model_params[0],
+            "xyz": model_params[1],
+            "features_dc": model_params[2],
+            "features_rest": model_params[3],
+            "scaling": model_params[4],
+            "rotation": model_params[5],
+            "opacity": model_params[6].squeeze(1),
+        }
+
+    elif format == "gsplat":
+        model_params = torch.load(input_path, weights_only=False)
+        splats = {
+            "active_sh_degree": 3,
+            "xyz": model_params["means"],
+            "features_dc": model_params["sh0"],
+            "features_rest": model_params["shN"],
+            "scaling": model_params["scales"],
+            "rotation": model_params["quats"],
+            "opacity": model_params["opacities"],
+        }
+    elif format == "ply":
+        plydata = PlyData.read(input_path)
+        vertex = plydata['vertex'].data
+
+        def to_tensor(name, dtype=torch.float32):
+            return torch.tensor(np.stack([v[name] for v in vertex]), dtype=dtype).to(device)
+
+        splats = {
+            "active_sh_degree": 3,
+            "xyz": torch.stack([to_tensor("x"), to_tensor("y"), to_tensor("z")], dim=1),
+            "features_dc": torch.stack([to_tensor("f_dc_0"), to_tensor("f_dc_1"), to_tensor("f_dc_2")], dim=1).reshape((-1,1,3)),
+            "features_rest": torch.stack(
+                [to_tensor(f"f_rest_{i}") for i in range(45)], dim=1
+            ).reshape((-1,15,3)),
+            "scaling": torch.stack([to_tensor(f"scale_{i}") for i in range(3)], dim=1),
+            "rotation": torch.stack([to_tensor(f"rot_{i}") for i in range(4)], dim=1),
+            "opacity": to_tensor("opacity"),
+        }
+
+    else:
+        raise ValueError("Invalid Gaussian splatting format")
+
 
     _detach_tensors_from_dict(splats)
 
     return splats, metadata
 
 
-def main(input_path: str):
-    splats, metadata = load_gaussian_splats_from_input_file(input_path)
+def main(input_path:str,format: Literal["ply","inria","gsplat"]="ply"):
+
+    splats, metadata = load_gaussian_splats_from_input_file(input_path, format)
     K = torch.tensor([[1000, 0, 500], [0, 1000, 500], [0, 0, 1.0]])
     K = K.to(device)
 
